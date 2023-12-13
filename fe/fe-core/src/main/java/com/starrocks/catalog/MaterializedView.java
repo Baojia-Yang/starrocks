@@ -107,12 +107,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DEFERRED
     }
 
-    public enum PlanMode {
-        VALID,
-        INVALID,
-        UNKNOWN
-    }
-
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
@@ -346,6 +340,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         public void setLastRefreshTime(long lastRefreshTime) {
             this.lastRefreshTime = lastRefreshTime;
         }
+
+        public MvRefreshScheme copy() {
+            MvRefreshScheme res = new MvRefreshScheme();
+            res.type = this.type;
+            res.lastRefreshTime = this.lastRefreshTime;
+            if (this.asyncRefreshContext != null) {
+                res.asyncRefreshContext = this.asyncRefreshContext.copy();
+            }
+            return res;
+        }
     }
 
     @SerializedName(value = "dbId")
@@ -501,6 +505,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setSimpleDefineSql(String simple) {
         this.simpleDefineSql = simple;
+    }
+
+    public String getTaskDefinition() {
+        return String.format("insert overwrite `%s` %s", getName(), getViewDefineSql());
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {
@@ -740,6 +748,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
                 fullSchema.size(), 0, getName(), "");
+    }
+
+    @Override
+    public void copyOnlyForQuery(OlapTable olapTable) {
+        super.copyOnlyForQuery(olapTable);
+        MaterializedView mv = (MaterializedView) olapTable;
+        mv.dbId = this.dbId;
+        mv.active = this.active;
+        mv.refreshScheme = this.refreshScheme.copy();
+        mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        if (this.baseTableIds != null) {
+            mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
+        }
+        if (this.baseTableInfos != null) {
+            mv.baseTableInfos = Lists.newArrayList(this.baseTableInfos);
+        }
+        if (this.partitionRefTableExprs != null) {
+            mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
+        }
     }
 
     @Override

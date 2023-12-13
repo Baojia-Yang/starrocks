@@ -75,12 +75,17 @@ public class FeConstants {
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
+    // Whether to canonize predicate after mv rewrite which make uts more stable
+    public static boolean isCanonizePredicateAfterMVRewrite = false;
     // set false to resolve ut
     public static boolean enablePruneEmptyOutputScan = true;
     public static boolean showJoinLocalShuffleInExplain = true;
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
+
+    // Max counter num of TOP K function
+    public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";

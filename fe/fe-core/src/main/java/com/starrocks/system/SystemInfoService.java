@@ -128,13 +128,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
-            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -193,14 +187,22 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addBackend(pair.first, pair.second);
+        }
+    }
+
+    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+        // check is already exist
+        if (getBackendWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
+        }
+
+        if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
         }
     }
 
@@ -319,7 +321,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = dropComputeNode.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -434,7 +436,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -776,6 +778,21 @@ public class SystemInfoService implements GsonPostProcessable {
                 v -> !v.diskExceedLimitByStorageMedium(storageMedium));
     }
 
+    public Long seqChooseBackendOrComputeId() throws UserException {
+        List<Long> backendIds = seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
+    }
+
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
@@ -949,17 +966,21 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-        AtomicLong atomicLong = null;
-        if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null) {
-                atomicLong.set(newReportVersion);
-                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        // only backend need to report version
+        if (node != null && (node instanceof Backend)) {
+            AtomicLong atomicLong = null;
+            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db != null) {
+                    atomicLong.set(newReportVersion);
+                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                } else {
+                    LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                }
             } else {
-                LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
             }
-        } else {
-            LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
         }
     }
 
@@ -1127,7 +1148,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (null != cluster) {
             cluster.removeComputeNode(computeNodeId);
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = cn.getStarletPort();
                 if (starletPort == 0) {
                     return;
@@ -1162,7 +1183,7 @@ public class SystemInfoService implements GsonPostProcessable {
             cluster.removeBackend(backend.getId());
 
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;

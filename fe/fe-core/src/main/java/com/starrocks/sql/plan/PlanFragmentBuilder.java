@@ -814,8 +814,7 @@ public class PlanFragmentBuilder {
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(
-                        "Build Exec OlapScanNode fail, scan info is invalid," + e.getMessage(),
-                        INTERNAL_ERROR);
+                        "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
 
             // set slot
@@ -1485,7 +1484,7 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
-                scanNode.assignBackends();
+                scanNode.assignNodes();
             } catch (UserException e) {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -2552,6 +2551,7 @@ public class PlanFragmentBuilder {
                     orderByElements,
                     node.getAnalyticWindow(),
                     node.isUseHashBasedPartition(),
+                    node.isSkewed(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -2577,6 +2577,8 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
+                sortNode.setAnalyticPartitionSkewed(node.isSkewed());
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);
@@ -2807,7 +2809,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());

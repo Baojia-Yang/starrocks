@@ -179,7 +179,6 @@ public class OptOlapPartitionPruner {
             if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                // TODO: take care `isConvertToDate` for olap table
                 min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
                 int cmp = minRange.compareTo(min);
                 if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
@@ -190,7 +189,6 @@ public class OptOlapPartitionPruner {
             if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                // TODO: take care `isConvertToDate` for olap table
                 max.pushColumn(upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
                 if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
@@ -320,7 +318,7 @@ public class OptOlapPartitionPruner {
         } catch (AnalysisException e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return specifyPartitionIds;
     }
 
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
@@ -345,7 +343,7 @@ public class OptOlapPartitionPruner {
         } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return Lists.newArrayList(keyRangeById.keySet());
     }
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
